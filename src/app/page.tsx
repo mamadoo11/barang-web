@@ -131,7 +131,7 @@ export default function HomePage() {
     setItems(current => current.map(item => item.id === id ? { ...item, [field]: value } : item));
   }
 
-  async function startVoiceEntry() {
+  function startVoiceEntry() {
     type Recognition = new () => {
       lang: string; interimResults: boolean; maxAlternatives: number;
       onstart: (() => void) | null;
@@ -141,47 +141,27 @@ export default function HomePage() {
       start: () => void;
       stop: () => void;
     };
-    if (typeof window === "undefined") return;
+    setVoiceMessage("درخواست شروع میکروفون ارسال شد؛ اگر اجازه خواست، «اجازه دادن» را بزن.");
+    if (typeof window === "undefined") {
+      setVoiceMessage("این صفحه هنوز آماده نیست؛ دوباره تلاش کن.");
+      return;
+    }
     if (!window.isSecureContext) {
-      setVoiceMessage("برای استفاده از میکروفون، سایت را با نشانی امن https باز کن.");
+      setVoiceMessage("نشانی سایت امن نیست. بارنگ را با نشانی https در Chrome باز کن.");
       return;
     }
     const speechWindow = window as unknown as { SpeechRecognition?: Recognition; webkitSpeechRecognition?: Recognition };
     const RecognitionClass = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
     if (!RecognitionClass) {
-      setVoiceMessage("این مرورگر تشخیص گفتار را پشتیبانی نمی‌کند. سایت را مستقیماً در Google Chrome باز کن؛ اگر باز هم کار نکرد، باید روش دیگری برای ورود صوتی بسازیم.");
-      return;
-    }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setVoiceMessage("این مرورگر دسترسی مستقیم به میکروفون را پشتیبانی نمی‌کند. سایت را در Google Chrome باز کن.");
+      setVoiceMessage("این مرورگر تشخیص گفتار را پشتیبانی نمی‌کند. Chrome را امتحان کن؛ اگر همین پیام ماند، باید روش ضبط دیگری بسازیم.");
       return;
     }
 
-    setVoiceMessage("در حال بررسی دسترسی میکروفون…");
-    let stream: MediaStream | undefined;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(track => track.stop());
-    } catch (err) {
-      const errorName = err instanceof DOMException ? err.name : "";
-      if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
-        setVoiceMessage("دسترسی میکروفون مسدود است. در تنظیمات سایت، میکروفون را روی «اجازه دادن» بگذار و دوباره تلاش کن.");
-      } else if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
-        setVoiceMessage("میکروفونی در دستگاه پیدا نشد.");
-      } else if (errorName === "NotReadableError" || errorName === "TrackStartError") {
-        setVoiceMessage("میکروفون مشغول است یا توسط برنامهٔ دیگری قابل استفاده نیست. برنامه‌های تماس و ضبط صدا را ببند و دوباره تلاش کن.");
-      } else {
-        setVoiceMessage("دسترسی میکروفون برقرار نشد. سایت را در Chrome باز کن و اجازهٔ میکروفون را بررسی کن.");
-      }
-      return;
-    }
-
-    setVoiceMessage("میکروفون در دسترس است؛ در حال شروع تشخیص گفتار فارسی…");
     let recognition: InstanceType<Recognition>;
     try {
       recognition = new RecognitionClass();
     } catch {
-      setVoiceMessage("مرورگر نتوانست سرویس تشخیص گفتار را آماده کند. سایت را در Chrome به‌روز امتحان کن.");
+      setVoiceMessage("مرورگر نتوانست سرویس گفتار را آماده کند. صفحه را تازه‌سازی و دوباره امتحان کن.");
       return;
     }
     recognition.lang = "fa-IR";
@@ -192,34 +172,30 @@ export default function HomePage() {
       const transcript = event.results[0]?.[0]?.transcript ?? "";
       if (!transcript) { setVoiceMessage("گفتاری تشخیص داده نشد؛ دوباره تلاش کن."); return; }
       const knownUnits = ["جفت","عدد","کارتن","بسته","کیلو","تن","حلقه","کیسه","متر","شاخه","دستگاه"];
-      const unitPattern = knownUnits.join("|");
-      const matcher = new RegExp("(\\d+(?:[.,]\\d+)?|[۰-۹٠-٩]+(?:[٫.,][۰-۹٠-٩]+)?)\\s*(" + unitPattern + ")", "g");
+      const matcher = new RegExp("(\\\\d+(?:[.,]\\\\d+)?|[۰-۹٠-٩]+(?:[٫.,][۰-۹٠-٩]+)?)\\\\s*(" + knownUnits.join("|") + ")", "g");
       const matches = [...transcript.matchAll(matcher)];
       let guessedName = transcript;
-      if (matches.length) guessedName = transcript.slice(0, matches[0].index).trim().replace(/[،,؛;\\s]+$/, "");
+      if (matches.length) guessedName = transcript.slice(0, matches[0].index).trim().replace(/[،,؛;\\\\s]+$/, "");
       if (guessedName) setPerson(current => current || guessedName);
       if (matches.length) {
-        setItems(matches.map(match => {
-          const unit = match[2];
-          return { ...emptyItem(), quantity: digitsEn(match[1].replace(",", ".")), unit, description: "" };
-        }));
-        setVoiceMessage("متن تشخیص داده شد. نام و تعدادها را بررسی کن؛ تشخیص گفتار ممکن است اشتباه کند.");
+        setItems(matches.map(match => ({ ...emptyItem(), quantity: digitsEn(match[1].replace(",", ".")), unit: match[2], description: "" })));
+        setVoiceMessage("متن تشخیص داده شد. نام و تعدادها را بررسی کن؛ ممکن است نیاز به اصلاح داشته باشد.");
       } else {
         setNote(current => current ? current + " " + transcript : transcript);
-        setVoiceMessage("متن شنیده‌شده در توضیحات قرار گرفت؛ نام و اقلام را دستی تکمیل کن.");
+        setVoiceMessage("متن شنیده‌شده در توضیحات قرار گرفت؛ نام و اقلام را بررسی کن.");
       }
     };
     recognition.onerror = event => {
       const messages: Record<string, string> = {
-        "not-allowed": "سرویس تشخیص گفتار اجازهٔ میکروفون ندارد. مجوز میکروفون سایت را در تنظیمات مرورگر بررسی کن.",
-        "service-not-allowed": "مرورگر سرویس تشخیص گفتار را مسدود کرده است. سایت را مستقیماً در Google Chrome باز کن.",
-        "audio-capture": "میکروفون پیدا نشد یا توسط برنامهٔ دیگری استفاده می‌شود.",
-        "network": "میکروفون در دسترس است، اما سرویس تشخیص گفتار به اینترنت وصل نشد.",
-        "no-speech": "میکروفون فعال شد اما صدایی دریافت نشد؛ اجازهٔ میکروفون و صدای ورودی را بررسی کن.",
-        "language-not-supported": "این مرورگر سرویس تشخیص گفتار فارسی را پشتیبانی نمی‌کند.",
-        "aborted": "تشخیص صدا متوقف شد. دوباره روی دکمهٔ گفتار بزن.",
+        "not-allowed": "اجازه میکروفون داده نشده. در تنظیمات سایت، میکروفون را روی «اجازه دادن» بگذار.",
+        "service-not-allowed": "مرورگر یا تنظیمات دستگاه، سرویس تشخیص گفتار را مسدود کرده است.",
+        "audio-capture": "میکروفون پیدا نشد یا توسط برنامه دیگری استفاده می‌شود.",
+        "network": "سرویس تشخیص گفتار به اینترنت وصل نشد؛ ممکن است میکروفون سالم باشد اما تبدیل صدا به متن انجام نشود.",
+        "no-speech": "صدایی دریافت نشد؛ صدای ورودی و مجوز میکروفون را بررسی کن.",
+        "language-not-supported": "تشخیص گفتار فارسی در این مرورگر پشتیبانی نمی‌شود.",
+        "aborted": "تشخیص صدا متوقف شد؛ دوباره روی دکمه بزن."
       };
-      setVoiceMessage(messages[event.error ?? ""] ?? `شروع تشخیص گفتار ناموفق بود${event.error ? " (" + event.error + ")" : ""}. سایت را در Chrome امتحان کن.`);
+      setVoiceMessage(messages[event.error ?? ""] ?? ("شروع گفتار ناموفق بود" + (event.error ? " (" + event.error + ")" : "") + ". صفحه را تازه‌سازی کن."));
     };
     recognition.onend = () => {
       setVoiceMessage(current => current.startsWith("میکروفون فعال است") ? "گوش‌دادن پایان یافت؛ اگر متنی وارد نشد، دوباره تلاش کن." : current);
@@ -230,7 +206,7 @@ export default function HomePage() {
       const errorName = err instanceof DOMException ? err.name : "";
       setVoiceMessage(errorName === "InvalidStateError"
         ? "تشخیص صدا از قبل فعال است؛ چند لحظه صبر کن و دوباره تلاش کن."
-        : "مرورگر نتوانست تشخیص صدا را شروع کند. سایت را مستقیماً در Google Chrome باز کن و دوباره امتحان کن.");
+        : "مرورگر نتوانست تشخیص صدا را شروع کند. مجوز میکروفون سایت را بررسی کن و دوباره امتحان کن.");
     }
   }
 
@@ -281,7 +257,7 @@ export default function HomePage() {
         <button className="quick-action" type="button" onClick={openNew}>
           <span className="quick-icon"><Plus size={23} /></span><span className="quick-text"><strong>ثبت ارسال جدید</strong><small>نام شخص و یک یا چند قلم بار</small></span><ChevronLeft className="quick-chevron" size={20} />
         </button>
-        <button className="quick-action voice-action" type="button" onClick={() => { openNew(); startVoiceEntry(); }}>
+        <button className="quick-action voice-action" type="button" onClick={openNew}>
           <span className="quick-icon voice-icon"><Mic size={22} /></span><span className="quick-text"><strong>ثبت با صدا</strong><small>مثلاً: علی ۲۰ جفت و ۳ کارتن</small></span><ChevronLeft className="quick-chevron" size={20} />
         </button>
       </section>
