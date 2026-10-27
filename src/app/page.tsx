@@ -135,7 +135,7 @@ export default function HomePage() {
     type Recognition = new () => {
       lang: string; interimResults: boolean; maxAlternatives: number;
       onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-      onerror: (() => void) | null; onend: (() => void) | null; start: () => void;
+      onerror: ((event: { error?: string }) => void) | null; onend: (() => void) | null; start: () => void;
     };
     const speechWindow = window as unknown as { SpeechRecognition?: Recognition; webkitSpeechRecognition?: Recognition };
     const RecognitionClass = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
@@ -169,7 +169,18 @@ export default function HomePage() {
         setVoiceMessage("متن شنیده‌شده در توضیحات قرار گرفت؛ نام و اقلام را دستی تکمیل کن.");
       }
     };
-    recognition.onerror = () => setVoiceMessage("میکروفون یا تشخیص گفتار در دسترس نبود. اجازه میکروفون را بررسی کن.");
+    recognition.onerror = event => {
+      const messages: Record<string, string> = {
+        "not-allowed": "اجازه استفاده از میکروفون داده نشده است. در تنظیمات سایت، دسترسی میکروفون را فعال کن.",
+        "service-not-allowed": "مرورگر اجازه استفاده از سرویس تشخیص گفتار را نمی‌دهد. Chrome را به‌روز کن و دوباره امتحان کن.",
+        "audio-capture": "میکروفون پیدا نشد یا توسط برنامه دیگری استفاده می‌شود.",
+        "network": "سرویس تشخیص گفتار به اینترنت وصل نشد. اتصال اینترنت را بررسی کن.",
+        "no-speech": "صدایی دریافت نشد. دوباره بزن و واضح صحبت کن.",
+        "language-not-supported": "تشخیص گفتار فارسی در این مرورگر پشتیبانی نمی‌شود.",
+        "aborted": "ضبط صدا متوقف شد. برای تلاش دوباره روی میکروفون بزن.",
+      };
+      setVoiceMessage(messages[event.error ?? ""] ?? "شروع یا تشخیص صدا ناموفق بود. دسترسی میکروفون و اتصال اینترنت را بررسی کن.");
+    };
     recognition.onend = () => {};
     try { recognition.start(); } catch { setVoiceMessage("شروع میکروفون ناموفق بود؛ دوباره تلاش کن."); }
   }
@@ -221,7 +232,7 @@ export default function HomePage() {
         <button className="quick-action" type="button" onClick={openNew}>
           <span className="quick-icon"><Plus size={23} /></span><span className="quick-text"><strong>ثبت ارسال جدید</strong><small>نام شخص و یک یا چند قلم بار</small></span><ChevronLeft className="quick-chevron" size={20} />
         </button>
-        <button className="quick-action voice-action" type="button" onClick={() => { openNew(); setTimeout(startVoiceEntry, 120); }}>
+        <button className="quick-action voice-action" type="button" onClick={() => { openNew(); startVoiceEntry(); }}>
           <span className="quick-icon voice-icon"><Mic size={22} /></span><span className="quick-text"><strong>ثبت با صدا</strong><small>مثلاً: علی ۲۰ جفت و ۳ کارتن</small></span><ChevronLeft className="quick-chevron" size={20} />
         </button>
       </section>
